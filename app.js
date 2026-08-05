@@ -1,4 +1,3 @@
-// Import Firebase core and features via CDN modules
 import { initializeApp } from "https://gstatic.com";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://gstatic.com";
 import { getDatabase, ref, set, push, onValue } from "https://gstatic.com";
@@ -15,12 +14,10 @@ const firebaseConfig = {
 };
 // -----------------------------------------------------------
 
-// Initialize Firebase engine instances
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// DOM elements cache references
 const authScreen = document.getElementById('authScreen');
 const employeeScreen = document.getElementById('employeeScreen');
 const adminScreen = document.getElementById('adminScreen');
@@ -44,13 +41,11 @@ const adminLeaveList = document.getElementById('adminLeaveList');
 let isLoginMode = true;
 let currentUserData = null;
 
-// Live interactive digital desk clock loop
 setInterval(() => {
     const now = new Date();
     liveClock.textContent = now.toTimeString().split(' ')[0];
 }, 1000);
 
-// Toggle between Sign In layout and Create Account layout
 authToggleBtn.addEventListener('click', () => {
     isLoginMode = !isLoginMode;
     authTitle.textContent = isLoginMode ? 'Sign In' : 'Create Account';
@@ -59,51 +54,46 @@ authToggleBtn.addEventListener('click', () => {
     authToggleBtn.textContent = isLoginMode ? 'Create one' : 'Sign in';
 });
 
-// Authentication Primary Process Execution
 authPrimaryBtn.addEventListener('click', async () => {
     const email = emailInput.value.trim();
     const password = passwordInput.value;
-
-    if (!email || !password) return alert('Please enter all security credentials.');
-
+    if (!email || !password) return alert('Please enter all credentials.');
     try {
         if (isLoginMode) {
             await signInWithEmailAndPassword(auth, email, password);
         } else {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
-            
-            // Default first account as Admin for testing, others as regular employees
             const assignedRole = email.includes('admin') ? 'admin' : 'employee';
-            
             await set(ref(db, 'users/' + user.uid), {
                 uid: user.uid,
                 email: email,
                 role: assignedRole,
                 name: email.split('@')[0]
             });
-            alert('Account created successfully!');
+            alert('Account registered successfully!');
         }
     } catch (error) {
         alert(error.message);
     }
 });
 
-// Handle user logouts
 logoutBtn.addEventListener('click', () => signOut(auth));
 
-// Application State Routing Management based on authenticated session state
 onAuthStateChanged(auth, (user) => {
     if (user) {
         logoutBtn.classList.remove('hidden');
         authScreen.classList.add('hidden');
-        
         onValue(ref(db, 'users/' + user.uid), (snapshot) => {
             currentUserData = snapshot.val() || { role: 'employee', name: user.email.split('@')[0] };
             if (currentUserData.role === 'admin') {
-                showAdminInterface();
+                adminScreen.classList.remove('hidden');
+                employeeScreen.classList.add('hidden');
+                loadAdminData();
             } else {
-                showEmployeeInterface();
+                employeeScreen.classList.remove('hidden');
+                adminScreen.classList.add('hidden');
+                loadEmployeeData();
             }
         }, { onlyOnce: true });
     } else {
@@ -112,15 +102,10 @@ onAuthStateChanged(auth, (user) => {
         authScreen.classList.remove('hidden');
         employeeScreen.classList.add('hidden');
         adminScreen.classList.add('hidden');
-        emailInput.value = '';
-        passwordInput.value = '';
     }
 });
 
-function showEmployeeInterface() {
-    employeeScreen.classList.remove('hidden');
-    adminScreen.classList.add('hidden');
-    
+function loadEmployeeData() {
     const today = new Date().toISOString().split('T')[0];
     onValue(ref(db, `attendance/${auth.currentUser.uid}/${today}`), (snapshot) => {
         const data = snapshot.val();
@@ -142,7 +127,6 @@ function showEmployeeInterface() {
     });
 }
 
-// Attendance Time Recording Updates
 punchInBtn.addEventListener('click', async () => {
     const today = new Date().toISOString().split('T')[0];
     const time = new Date().toTimeString().split(' ')[0];
@@ -159,14 +143,11 @@ punchOutBtn.addEventListener('click', async () => {
     await set(ref(db, `attendance/${auth.currentUser.uid}/${today}/checkOut`), time);
 });
 
-// Leave Application Processing Submission
 submitLeaveBtn.addEventListener('click', async () => {
     const date = leaveDate.value;
     const reason = leaveReason.value.trim();
     if (!date || !reason) return alert('Fill out complete fields.');
-
-    const leaveRef = ref(db, 'leaves');
-    const newLeaveRef = push(leaveRef);
+    const newLeaveRef = push(ref(db, 'leaves'));
     await set(newLeaveRef, {
         uid: auth.currentUser.uid,
         employeeName: currentUserData.name,
@@ -174,58 +155,54 @@ submitLeaveBtn.addEventListener('click', async () => {
         reason: reason,
         status: 'Pending'
     });
-    alert('Leave request dispatched successfully!');
+    alert('Leave request submitted!');
     leaveDate.value = '';
     leaveReason.value = '';
 });
 
-function showAdminInterface() {
-    adminScreen.classList.remove('hidden');
-    employeeScreen.classList.add('hidden');
-    
-    // Live Monitoring Feed for Admin Overview
+function loadAdminData() {
+    const today = new Date().toISOString().split('T')[0];
     onValue(ref(db, 'attendance'), (snapshot) => {
         adminAttendanceList.innerHTML = '';
         const data = snapshot.val();
-        if (!data) {
-            adminAttendanceList.innerHTML = '<p class="italic text-gray-500">No punch records found.</p>';
-            return;
+        let logsFound = false;
+        if (data) {
+            Object.keys(data).forEach(uid => {
+                if (data[uid][today]) {
+                    logsFound = true;
+                    const log = data[uid][today];
+                    const div = document.createElement('div');
+                    div.className = "bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between text-xs";
+                    div.innerHTML = `<span><b>${log.employeeName}</b></span> <span>In: ${log.checkIn} | Out: ${log.checkOut || '--'}</span>`;
+                    adminAttendanceList.appendChild(div);
+                }
+            });
         }
-        const today = new Date().toISOString().split('T')[0];
-        let entriesFound = false;
-        
-        Object.keys(data).forEach(uid => {
-            if (data[uid][today]) {
-                entriesFound = true;
-                const record = data[uid][today];
-                const item = document.createElement('div');
-                item.className = "bg-gray-700/50 p-2.5 rounded-lg border border-gray-600/40 flex justify-between";
-                item.innerHTML = `<strong>${record.employeeName}</strong> <span>In: ${record.checkIn} | Out: ${record.checkOut || '--:--'}</span>`;
-                adminAttendanceList.appendChild(item);
-            }
-        });
-        if (!entriesFound) adminAttendanceList.innerHTML = '<p class="italic text-gray-500">No logs recorded today.</p>';
+        if (!logsFound) adminAttendanceList.innerHTML = '<p class="italic text-gray-500 text-xs">No logs recorded today.</p>';
     });
 
     onValue(ref(db, 'leaves'), (snapshot) => {
         adminLeaveList.innerHTML = '';
         const data = snapshot.val();
-        if (!data) {
-            adminLeaveList.innerHTML = '<p class="italic text-gray-500">No pending requests.</p>';
-            return;
+        let requestsFound = false;
+        if (data) {
+            Object.keys(data).forEach(key => {
+                const leave = data[key];
+                if (leave.status === 'Pending') {
+                    requestsFound = true;
+                    const div = document.createElement('div');
+                    div.className = "bg-gray-800 p-3 rounded-xl border border-gray-700 space-y-2 text-xs";
+                    div.innerHTML = `
+                        <div><b>${leave.employeeName}</b> (${leave.date})<br><span class="text-gray-400">${leave.reason}</span></div>
+                        <div class="flex gap-2">
+                            <button onclick="window.updateLeaveStatus('${key}', 'Approved')" class="bg-emerald-600 px-3 py-1 font-bold rounded text-white text-xxs">Approve</button>
+                            <button onclick="window.updateLeaveStatus('${key}', 'Rejected')" class="bg-rose-600 px-3 py-1 font-bold rounded text-white text-xxs">Reject</button>
+                        </div>`;
+                    adminLeaveList.appendChild(div);
+                }
+            });
         }
-        Object.keys(data).forEach(key => {
-            const leave = data[key];
-            if (leave.status === 'Pending') {
-                const item = document.createElement('div');
-                item.className = "bg-gray-700/50 p-3 rounded-lg border border-gray-600/40 space-y-2";
-                item.innerHTML = `
-                    <div><strong>${leave.employeeName}</strong> requires leave on <strong>${leave.date}</strong><br><span class="text-xs text-gray-400">Reason: ${leave.reason}</span></div>
-                    <div class="flex gap-2"><button onclick="window.updateLeaveStatus('${key}', 'Approved')" class="bg-emerald-600 px-3 py-1 text-xs font-bold rounded text-white">Approve</button><button onclick="window.updateLeaveStatus('${key}', 'Rejected')" class="bg-rose-600 px-3 py-1 text-xs font-bold rounded text-white">Reject</button></div>
-                `;
-                adminLeaveList.appendChild(item);
-            }
-        });
+        if (!requestsFound) adminLeaveList.innerHTML = '<p class="italic text-gray-500 text-xs">No pending requests.</p>';
     });
 }
 
