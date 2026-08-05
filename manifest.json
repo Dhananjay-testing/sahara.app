@@ -1,0 +1,17 @@
+{
+  "short_name": "SaharaHR",
+  "name": "Sahara HRMS Portal",
+  "icons": [
+    {
+      "src": "https://flaticon.com",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "index.html",
+  "background_color": "#111827",
+  "theme_color": "#14b8a6",
+  "display": "standalone",
+  "orientation": "portrait"
+}
